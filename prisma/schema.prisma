@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id
+  name          String
+  email         String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  role Role @default(USER)
+
+  sessions Session[]
+  accounts Account[]
+
+  ownedEvents         Event[]       @relation("OwnedEvents")
+  participants        Participant[]
+  reviews             Review[]
+  sentInvitations     Invitation[]  @relation("SentInvitations")
+  receivedInvitations Invitation[]  @relation("ReceivedInvitations")
+  payments            Payment[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum EventType {
+  PUBLIC
+  PRIVATE
+}
+
+enum ParticipantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  BANNED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum PaymentStatus {
+  INITIATED
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+
+model Event {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  venue       String?
+  eventLink   String?
+  date        DateTime
+  time        String
+  type        EventType @default(PUBLIC)
+  fee         Float     @default(0)
+  isFeatured  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  ownerId String
+  owner   User   @relation("OwnedEvents", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  participants Participant[]
+  reviews      Review[]
+  invitations  Invitation[]
+  payments     Payment[]
+
+  @@map("event")
+}
+
+model Participant {
+  id        String            @id @default(cuid())
+  status    ParticipantStatus @default(PENDING)
+  paidAt    DateTime?
+  createdAt DateTime          @default(now())
+
+  userId  String
+  eventId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("participant")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId  String
+  eventId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+  @@map("review")
+}
+
+model Invitation {
+  id        String           @id @default(cuid())
+  status    InvitationStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+
+  senderId   String
+  receiverId String
+  eventId    String
+  sender     User   @relation("SentInvitations", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User   @relation("ReceivedInvitations", fields: [receiverId], references: [id], onDelete: Cascade)
+  event      Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([receiverId, eventId])
+  @@map("invitation")
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  tranId    String        @unique
+  amount    Float
+  currency  String        @default("BDT")
+  status    PaymentStatus @default(INITIATED)
+  createdAt DateTime      @default(now())
+
+  userId  String
+  eventId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("payment")
+}
