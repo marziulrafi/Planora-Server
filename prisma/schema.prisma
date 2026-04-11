@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -27,6 +28,9 @@ model User {
   sentInvitations     Invitation[]  @relation("SentInvitations")
   receivedInvitations Invitation[]  @relation("ReceivedInvitations")
   payments            Payment[]
+
+  phone  String?
+  status String? @default("ACTIVE")
 
   @@unique([email])
   @@map("user")
@@ -80,7 +84,6 @@ model Verification {
   @@map("verification")
 }
 
-
 enum Role {
   USER
   ADMIN
@@ -110,7 +113,6 @@ enum PaymentStatus {
   FAILED
   CANCELLED
 }
-
 
 model Event {
   id          String    @id @default(cuid())
