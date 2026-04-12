@@ -15,17 +15,20 @@ export const auth = betterAuth({
             role: {
                 type: "string",
                 defaultValue: "USER",
-                required: false
-            },
-            phone: {
-                type: "string",
                 required: false,
+                input: false,
             },
             status: {
                 type: "string",
                 defaultValue: "ACTIVE",
                 required: false,
-            }
+                input: false,
+            },
+            phone: {
+                type: "string",
+                required: false,
+                input: true,
+            },
         }
     },
     emailAndPassword: {
