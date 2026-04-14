@@ -3,6 +3,7 @@ import { toNodeHandler } from "better-auth/node";
 import { auth } from './lib/auth';
 import cors from 'cors';
 import authRoutes from "./modules/auth/auth.routes";
+import eventRoutes from "./modules/event/event.routes";
 
 const app: Application = express();
 
@@ -15,6 +16,7 @@ app.use(cors({
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/events", eventRoutes);
 
 app.get('/', (req, res) => {
     res.send('Welcome to Planora');
