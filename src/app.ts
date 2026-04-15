@@ -5,6 +5,7 @@ import cors from 'cors';
 import authRoutes from "./modules/auth/auth.routes";
 import eventRoutes from "./modules/event/event.routes";
 import participantRoutes from "./modules/participant/participant.routes";
+import reviewRoutes from "./modules/review/review.routes";
 
 const app: Application = express();
 
@@ -19,6 +20,8 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/participants", participantRoutes);
+app.use("/api/reviews", reviewRoutes);
+
 
 app.get('/', (req, res) => {
     res.send('Welcome to Planora');
