@@ -7,6 +7,7 @@ import eventRoutes from "./modules/event/event.routes";
 import participantRoutes from "./modules/participant/participant.routes";
 import reviewRoutes from "./modules/review/review.routes";
 import adminRoutes from "./modules/admin/admin.routes";
+import invitationRoutes from "./modules/invitation/invitation.routes";
 
 
 
@@ -25,6 +26,7 @@ app.use("/api/events", eventRoutes);
 app.use("/api/participants", participantRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/invitations", invitationRoutes);
 
 
 app.get('/', (req, res) => {

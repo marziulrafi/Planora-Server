@@ -1,4 +1,4 @@
-import express, { Router } from "express";
+import { Router } from "express";
 import { AuthController } from "./auth.controller";
 import auth, { UserRole } from "../../middlewares/auth";
 
