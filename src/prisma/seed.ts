@@ -17,14 +17,12 @@ async function main() {
         return;
     }
 
-    // ✅ Create user via better-auth
     const { user } = await AuthService.register({
         name: "Admin",
         email,
         password,
     });
 
-    // ✅ Promote to ADMIN
     await prisma.user.update({
         where: { id: user.id },
         data: {

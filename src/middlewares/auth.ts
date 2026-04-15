@@ -7,7 +7,6 @@ export enum UserRole {
     ADMIN = "ADMIN",
 }
 
-// Define safe user shape
 export type AuthUser = {
     id: string;
     email?: string;
@@ -26,7 +25,6 @@ const authMiddleware =
     (...roles: UserRole[]) =>
         async (req: Request, res: Response, next: NextFunction) => {
             try {
-                // Always read fresh headers (prevents stale session issues)
                 const headers = fromNodeHeaders({
                     ...req.headers,
                     authorization: req.headers.authorization || "",
@@ -40,14 +38,12 @@ const authMiddleware =
                     return res.status(401).json({ error: "Unauthorized" });
                 }
 
-                // Normalize user (IMPORTANT FIX)
                 const user: AuthUser = {
-                    id: session.user.id, // 🔥 ALWAYS USE id explicitly
+                    id: session.user.id,
                     email: session.user.email,
                     role: session.user.role as UserRole,
                 };
 
-                // Role check
                 if (roles.length && !roles.includes(user.role)) {
                     return res.status(403).json({ error: "Forbidden" });
                 }
