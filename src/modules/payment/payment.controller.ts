@@ -13,8 +13,18 @@ const initiatePayment = async (req: Request, res: Response) => {
     }
 };
 
+const handleSuccess = async (req: Request, res: Response) => {
+    try {
+        const { tran_id } = req.body;
+        await PaymentService.handleSuccess(tran_id);
+        res.redirect(`${process.env.CLIENT_URL}/payment/success?tran_id=${tran_id}`);
+    } catch (e) {
+        res.redirect(`${process.env.CLIENT_URL}/payment/fail`);
+    }
+};
+
 
 export const PaymentController = {
     initiatePayment,
-    
+    handleSuccess
 }

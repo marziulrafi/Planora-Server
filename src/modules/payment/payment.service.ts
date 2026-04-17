@@ -51,9 +51,31 @@ const initiatePayment = async (userId: string, eventId: string) => {
     return { gatewayUrl: apiResponse.GatewayPageURL, tranId };
 };
 
+const handleSuccess = async (tranId: string) => {
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { tranId } });
+
+    await prisma.$transaction([
+        prisma.payment.update({
+            where: { tranId },
+            data: { status: "SUCCESS" },
+        }),
+        prisma.participant.upsert({
+            where: {
+                userId_eventId: { userId: payment.userId, eventId: payment.eventId },
+            },
+            create: {
+                userId: payment.userId,
+                eventId: payment.eventId,
+                status: "PENDING",
+                paidAt: new Date(),
+            },
+            update: { status: "PENDING", paidAt: new Date() },
+        }),
+    ]);
+};
 
 
 export const PaymentService = {
     initiatePayment,
-    
+    handleSuccess
 }
