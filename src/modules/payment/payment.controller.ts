@@ -23,8 +23,30 @@ const handleSuccess = async (req: Request, res: Response) => {
     }
 };
 
+const handleFail = async (req: Request, res: Response) => {
+    try {
+        const { tran_id } = req.body;
+        await PaymentService.handleFail(tran_id);
+        res.redirect(`${process.env.CLIENT_URL}/payment/fail`);
+    } catch (e) {
+        res.redirect(`${process.env.CLIENT_URL}/payment/fail`);
+    }
+};
+
+const handleCancel = async (req: Request, res: Response) => {
+    try {
+        const { tran_id } = req.body;
+        await PaymentService.handleCancel(tran_id);
+        res.redirect(`${process.env.CLIENT_URL}/payment/cancel`);
+    } catch (e) {
+        res.redirect(`${process.env.CLIENT_URL}/payment/cancel`);
+    }
+};
+
 
 export const PaymentController = {
     initiatePayment,
-    handleSuccess
+    handleSuccess,
+    handleFail,
+    handleCancel
 }

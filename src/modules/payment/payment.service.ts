@@ -74,8 +74,24 @@ const handleSuccess = async (tranId: string) => {
     ]);
 };
 
+const handleFail = async (tranId: string) => {
+    await prisma.payment.update({
+        where: { tranId },
+        data: { status: "FAILED" },
+    });
+};
+
+const handleCancel = async (tranId: string) => {
+    await prisma.payment.update({
+        where: { tranId },
+        data: { status: "CANCELLED" },
+    });
+};
+
 
 export const PaymentService = {
     initiatePayment,
-    handleSuccess
+    handleSuccess,
+    handleFail,
+    handleCancel
 }

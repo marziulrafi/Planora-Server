@@ -10,6 +10,9 @@ router.post(
     PaymentController.initiatePayment
 );
 
+
 router.post("/success", PaymentController.handleSuccess);
+router.post("/fail", PaymentController.handleFail);
+router.post("/cancel", PaymentController.handleCancel);
 
 export default router;
