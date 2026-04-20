@@ -88,10 +88,20 @@ const handleCancel = async (tranId: string) => {
     });
 };
 
+const getMyPayments = async (userId: string) => {
+    return await prisma.payment.findMany({
+        where: { userId },
+        include: {
+            event: { select: { id: true, title: true, date: true } },
+        },
+        orderBy: { createdAt: "desc" },
+    });
+};
 
 export const PaymentService = {
     initiatePayment,
     handleSuccess,
     handleFail,
-    handleCancel
+    handleCancel,
+    getMyPayments
 }

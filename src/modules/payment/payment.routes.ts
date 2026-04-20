@@ -10,6 +10,11 @@ router.post(
     PaymentController.initiatePayment
 );
 
+router.get(
+    "/my",
+    auth(UserRole.USER, UserRole.ADMIN),
+    PaymentController.getMyPayments
+);
 
 router.post("/success", PaymentController.handleSuccess);
 router.post("/fail", PaymentController.handleFail);

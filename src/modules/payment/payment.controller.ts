@@ -43,10 +43,20 @@ const handleCancel = async (req: Request, res: Response) => {
     }
 };
 
+const getMyPayments = async (req: Request, res: Response) => {
+    try {
+        const user = req.user;
+        const result = await PaymentService.getMyPayments(user?.id as string);
+        res.status(200).json(result);
+    } catch (e) {
+        res.status(400).json({ error: "Failed to fetch payments", details: e });
+    }
+};
 
 export const PaymentController = {
     initiatePayment,
     handleSuccess,
     handleFail,
-    handleCancel
+    handleCancel,
+    getMyPayments
 }
