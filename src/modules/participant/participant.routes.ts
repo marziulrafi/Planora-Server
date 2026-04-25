@@ -9,10 +9,11 @@ router.get(
     auth(UserRole.USER, UserRole.ADMIN),
     ParticipantController.getMyJoinedEvents
 );
-router.get(
-    "/:eventId",
+
+router.post(
+    "/",
     auth(UserRole.USER, UserRole.ADMIN),
-    ParticipantController.getParticipantsByEvent
+    ParticipantController.createParticipant
 );
 router.post(
     "/:eventId/join",
@@ -38,6 +39,12 @@ router.patch(
     "/:eventId/participants/:userId/ban",
     auth(UserRole.USER, UserRole.ADMIN),
     ParticipantController.banParticipant
+);
+
+router.get(
+    "/:eventId",
+    auth(UserRole.USER, UserRole.ADMIN),
+    ParticipantController.getParticipantsByEvent
 );
 
 export default router;

@@ -1,15 +1,15 @@
 import { Request, Response } from "express";
 import { InvitationService } from "./invitation.service";
+import { sendError, sendSuccess } from "../../lib/http";
 
 const sendInvitation = async (req: Request, res: Response) => {
     try {
         const user = req.user;
         req.body.senderId = user?.id;
         const result = await InvitationService.sendInvitation(req.body);
-        res.status(201).json(result);
+        sendSuccess(res, result, 201);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to send invitation";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Failed to send invitation", 400);
     }
 };
 
@@ -17,33 +17,31 @@ const getMyInvitations = async (req: Request, res: Response) => {
     try {
         const user = req.user;
         const result = await InvitationService.getMyInvitations(user?.id as string);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to fetch invitations", details: e });
+        sendError(res, "Failed to fetch invitations", 400);
     }
 };
 
 const acceptInvitation = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { invitationId } = req.params;
+        const invitationId = String(req.params.invitationId);
         const result = await InvitationService.acceptInvitation(invitationId, user?.id as string);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to accept invitation";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Failed to accept invitation", 400);
     }
 };
 
 const declineInvitation = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { invitationId } = req.params;
+        const invitationId = String(req.params.invitationId);
         const result = await InvitationService.declineInvitation(invitationId, user?.id as string);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Failed to decline invitation";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Failed to decline invitation", 400);
     }
 };
 

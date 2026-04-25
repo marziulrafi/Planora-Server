@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth";
+import { sendError } from "../lib/http";
 
 export enum UserRole {
     USER = "USER",
@@ -21,39 +22,37 @@ declare global {
     }
 }
 
+/**
+ * Auth middleware using Better Auth session cookies only.
+ * No JWT / Bearer tokens needed.
+ */
 const authMiddleware =
     (...roles: UserRole[]) =>
         async (req: Request, res: Response, next: NextFunction) => {
             try {
-                const headers = fromNodeHeaders({
-                    ...req.headers,
-                    authorization: req.headers.authorization || "",
-                });
+                const headers = fromNodeHeaders(req.headers);
 
-                const session = await auth.api.getSession({
-                    headers,
-                });
+                const session = await auth.api.getSession({ headers });
 
                 if (!session?.user) {
-                    return res.status(401).json({ error: "Unauthorized" });
+                    return sendError(res, "Unauthorized", 401);
                 }
 
                 const user: AuthUser = {
                     id: session.user.id,
                     email: session.user.email,
-                    role: session.user.role as UserRole,
+                    role: (session.user as any).role as UserRole,
                 };
 
                 if (roles.length && !roles.includes(user.role)) {
-                    return res.status(403).json({ error: "Forbidden" });
+                    return sendError(res, "Forbidden", 403);
                 }
 
                 req.user = user;
-
                 return next();
             } catch (error) {
                 console.error("Auth middleware error:", error);
-                return res.status(401).json({ error: "Invalid session" });
+                return sendError(res, "Invalid session", 401);
             }
         };
 

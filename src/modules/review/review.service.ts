@@ -22,7 +22,13 @@ const createReview = async (payload: {
     });
     if (existing) throw new Error("You have already reviewed this event");
 
-    return await prisma.review.create({ data: payload });
+    return await prisma.review.create({
+        data: payload,
+        include: {
+            user: { select: { id: true, name: true, image: true } },
+            event: { select: { id: true, title: true, date: true } },
+        },
+    });
 };
 
 const getReviewsByEvent = async (eventId: string) => {
@@ -53,7 +59,14 @@ const updateReview = async (
     const review = await prisma.review.findFirst({ where: { id: reviewId, userId } });
     if (!review) throw new Error("Review not found or you are not the author");
 
-    return await prisma.review.update({ where: { id: reviewId }, data });
+    return await prisma.review.update({
+        where: { id: reviewId },
+        data,
+        include: {
+            user: { select: { id: true, name: true, image: true } },
+            event: { select: { id: true, title: true, date: true } },
+        },
+    });
 };
 
 const deleteReview = async (reviewId: string, userId: string, role: string) => {

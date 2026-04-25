@@ -19,6 +19,9 @@ const initiatePayment = async (userId: string, eventId: string) => {
     const storePass = process.env.SSLCOMMERZ_STORE_PASS as string;
     const isLive = process.env.SSLCOMMERZ_IS_LIVE === "true";
     const serverUrl = process.env.SERVER_URL as string;
+    if (!serverUrl) {
+        throw new Error("SERVER_URL is not configured");
+    }
 
     const sslData = {
         store_id: storeId,
@@ -48,13 +51,19 @@ const initiatePayment = async (userId: string, eventId: string) => {
         throw new Error("Failed to initialize payment gateway");
     }
 
-    return { gatewayUrl: apiResponse.GatewayPageURL, tranId };
+    return { gatewayUrl: apiResponse.GatewayPageURL, paymentUrl: apiResponse.GatewayPageURL, tranId };
 };
 
 const handleSuccess = async (tranId: string) => {
-    const payment = await prisma.payment.findUniqueOrThrow({ where: { tranId } });
+    const payment = await prisma.payment.findUnique({ where: { tranId } });
+    if (!payment) throw new Error("Payment not found");
 
-    await prisma.$transaction([
+    if (payment.status === "SUCCESS") {
+        return payment;
+    }
+
+    const paidAt = new Date();
+    const [updatedPayment, participant] = await prisma.$transaction([
         prisma.payment.update({
             where: { tranId },
             data: { status: "SUCCESS" },
@@ -67,22 +76,34 @@ const handleSuccess = async (tranId: string) => {
                 userId: payment.userId,
                 eventId: payment.eventId,
                 status: "PENDING",
-                paidAt: new Date(),
+                paidAt,
             },
-            update: { status: "PENDING", paidAt: new Date() },
+            update: { status: "PENDING", paidAt },
         }),
     ]);
+
+    return { payment: updatedPayment, participant };
+};
+
+const getPaymentByTranId = async (tranId: string) => {
+    return prisma.payment.findUnique({
+        where: { tranId },
+        include: {
+            event: { select: { id: true, title: true, date: true } },
+            user: { select: { id: true, name: true, email: true } },
+        },
+    });
 };
 
 const handleFail = async (tranId: string) => {
-    await prisma.payment.update({
+    await prisma.payment.updateMany({
         where: { tranId },
         data: { status: "FAILED" },
     });
 };
 
 const handleCancel = async (tranId: string) => {
-    await prisma.payment.update({
+    await prisma.payment.updateMany({
         where: { tranId },
         data: { status: "CANCELLED" },
     });
@@ -103,5 +124,6 @@ export const PaymentService = {
     handleSuccess,
     handleFail,
     handleCancel,
-    getMyPayments
+    getMyPayments,
+    getPaymentByTranId,
 }

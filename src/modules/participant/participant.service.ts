@@ -18,8 +18,6 @@ const joinFreePublicEvent = async (userId: string, eventId: string) => {
     return await prisma.participant.create({
         data: { userId, eventId, status: "APPROVED" },
     });
-
-    
 };
 
 const requestToJoin = async (userId: string, eventId: string) => {
@@ -37,6 +35,45 @@ const requestToJoin = async (userId: string, eventId: string) => {
     return await prisma.participant.create({
         data: { userId, eventId, status: "PENDING" },
     });
+};
+
+const createParticipant = async (
+    userId: string,
+    payload: { eventId: string; action: "join" | "request" }
+) => {
+    const event = await prisma.event.findUniqueOrThrow({ where: { id: payload.eventId } });
+
+    if (event.ownerId === userId) {
+        throw new Error("You cannot join your own event");
+    }
+
+    const existing = await prisma.participant.findUnique({
+        where: { userId_eventId: { userId, eventId: payload.eventId } },
+    });
+    if (existing) throw new Error("You have already joined or requested this event");
+
+    if (payload.action === "join") {
+        if (event.type !== "PUBLIC") {
+            throw new Error("Only public events can be joined directly");
+        }
+        if (event.fee > 0) {
+            throw new Error("Paid events require payment before joining");
+        }
+        return await prisma.participant.create({
+            data: { userId, eventId: payload.eventId, status: "APPROVED" },
+        });
+    }
+
+    if (payload.action === "request") {
+        if (event.fee > 0) {
+            throw new Error("Paid events require payment before requesting access");
+        }
+        return await prisma.participant.create({
+            data: { userId, eventId: payload.eventId, status: "PENDING" },
+        });
+    }
+
+    throw new Error("Invalid participant action");
 };
 
 const approveParticipant = async (
@@ -106,13 +143,19 @@ const getParticipantsByEvent = async (eventId: string, requesterId: string) => {
     });
 };
 
+/**
+ * Returns Participant[] (with event included) for the current user.
+ * Only includes events the user joined (not owned).
+ * Ownership is managed separately via GET /events/my.
+ */
 const getMyJoinedEvents = async (userId: string) => {
     return await prisma.participant.findMany({
         where: { userId },
         include: {
             event: {
                 include: {
-                    owner: { select: { id: true, name: true } },
+                    owner: { select: { id: true, name: true, image: true } },
+                    _count: { select: { participants: true } },
                 },
             },
         },
@@ -120,10 +163,9 @@ const getMyJoinedEvents = async (userId: string) => {
     });
 };
 
-
-
 export const ParticipantService = {
     joinFreePublicEvent,
+    createParticipant,
     requestToJoin,
     approveParticipant,
     rejectParticipant,

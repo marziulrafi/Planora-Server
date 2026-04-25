@@ -1,85 +1,94 @@
 import { Request, Response } from "express";
 import { EventService } from "./event.service";
+import { sendError, sendSuccess } from "../../lib/http";
 
 const createEvent = async (req: Request, res: Response) => {
     try {
         const user = req.user;
         req.body.ownerId = user?.id;
         const result = await EventService.createEvent(req.body);
-        res.status(201).json(result);
+        sendSuccess(res, result, 201);
     } catch (e) {
-        res.status(400).json({ error: "Event creation failed", details: e });
+        sendError(res, e instanceof Error ? e.message : "Event creation failed", 400);
     }
 };
 
 const getAllEvents = async (req: Request, res: Response) => {
     try {
         const result = await EventService.getAllEvents(req.query as any);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to fetch events", details: e });
+        sendError(res, "Failed to fetch events", 400);
     }
 };
 
 const getFeaturedEvent = async (req: Request, res: Response) => {
     try {
         const result = await EventService.getFeaturedEvent();
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to fetch featured event", details: e });
+        sendError(res, "Failed to fetch featured event", 400);
     }
 };
 
 const getUpcomingEvents = async (req: Request, res: Response) => {
     try {
         const result = await EventService.getUpcomingEvents();
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to fetch upcoming events", details: e });
+        sendError(res, "Failed to fetch upcoming events", 400);
+    }
+};
+
+const getMyEvents = async (req: Request, res: Response) => {
+    try {
+        const user = req.user;
+        const result = await EventService.getMyEvents(user?.id as string);
+        sendSuccess(res, result);
+    } catch (e) {
+        sendError(res, "Failed to fetch your events", 400);
     }
 };
 
 const getEventById = async (req: Request, res: Response) => {
     try {
-        const { eventId } = req.params;
+        const eventId = String(req.params.eventId);
         const result = await EventService.getEventById(eventId);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(404).json({ error: "Event not found", details: e });
+        sendError(res, "Event not found", 404);
     }
 };
 
 const updateEvent = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { eventId } = req.params;
+        const eventId = String(req.params.eventId);
         const result = await EventService.updateEvent(eventId, user?.id as string, req.body);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Event update failed";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Event update failed", 400);
     }
 };
 
 const deleteEvent = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { eventId } = req.params;
+        const eventId = String(req.params.eventId);
         const result = await EventService.deleteEvent(eventId, user?.id as string, user?.role as string);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Event delete failed";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Event delete failed", 400);
     }
 };
 
 const setFeaturedEvent = async (req: Request, res: Response) => {
     try {
-        const { eventId } = req.params;
+        const eventId = String(req.params.eventId);
         const result = await EventService.setFeaturedEvent(eventId);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to set featured event", details: e });
+        sendError(res, "Failed to set featured event", 400);
     }
 };
 
@@ -88,6 +97,7 @@ export const EventController = {
     getAllEvents,
     getFeaturedEvent,
     getUpcomingEvents,
+    getMyEvents,
     getEventById,
     updateEvent,
     deleteEvent,

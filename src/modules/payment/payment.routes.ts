@@ -10,14 +10,26 @@ router.post(
     PaymentController.initiatePayment
 );
 
+router.post(
+    "/init",
+    auth(UserRole.USER, UserRole.ADMIN),
+    PaymentController.initiatePayment
+);
+
 router.get(
     "/my",
     auth(UserRole.USER, UserRole.ADMIN),
     PaymentController.getMyPayments
 );
 
+
 router.post("/success", PaymentController.handleSuccess);
 router.post("/fail", PaymentController.handleFail);
 router.post("/cancel", PaymentController.handleCancel);
+router.get("/success", PaymentController.handleSuccess);
+router.get("/fail", PaymentController.handleFail);
+router.get("/cancel", PaymentController.handleCancel);
+
+router.get("/verify", PaymentController.verifyPayment);
 
 export default router;

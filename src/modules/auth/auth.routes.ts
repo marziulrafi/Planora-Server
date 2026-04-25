@@ -4,9 +4,6 @@ import auth, { UserRole } from "../../middlewares/auth";
 
 const router = Router() as any;
 
-router.post("/register", AuthController.register);
-router.post("/login", AuthController.login);
-
 router.get(
     "/me",
     auth(UserRole.USER, UserRole.ADMIN),

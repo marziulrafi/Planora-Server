@@ -1,25 +1,25 @@
 import { Request, Response } from "express";
 import { ReviewService } from "./review.service";
+import { sendError, sendSuccess } from "../../lib/http";
 
 const createReview = async (req: Request, res: Response) => {
     try {
         const user = req.user;
         req.body.userId = user?.id;
         const result = await ReviewService.createReview(req.body);
-        res.status(201).json(result);
+        sendSuccess(res, result, 201);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Review creation failed";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Review creation failed", 400);
     }
 };
 
 const getReviewsByEvent = async (req: Request, res: Response) => {
     try {
-        const { eventId } = req.params;
+        const eventId = String(req.params.eventId);
         const result = await ReviewService.getReviewsByEvent(eventId);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to fetch reviews", details: e });
+        sendError(res, "Failed to fetch reviews", 400);
     }
 };
 
@@ -27,33 +27,31 @@ const getMyReviews = async (req: Request, res: Response) => {
     try {
         const user = req.user;
         const result = await ReviewService.getMyReviews(user?.id as string);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        res.status(400).json({ error: "Failed to fetch your reviews", details: e });
+        sendError(res, "Failed to fetch your reviews", 400);
     }
 };
 
 const updateReview = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { reviewId } = req.params;
+        const reviewId = String(req.params.reviewId);
         const result = await ReviewService.updateReview(reviewId, user?.id as string, req.body);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Review update failed";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Review update failed", 400);
     }
 };
 
 const deleteReview = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { reviewId } = req.params;
+        const reviewId = String(req.params.reviewId);
         const result = await ReviewService.deleteReview(reviewId, user?.id as string, user?.role as string);
-        res.status(200).json(result);
+        sendSuccess(res, result);
     } catch (e) {
-        const msg = e instanceof Error ? e.message : "Review delete failed";
-        res.status(400).json({ error: msg, details: e });
+        sendError(res, e instanceof Error ? e.message : "Review delete failed", 400);
     }
 };
 

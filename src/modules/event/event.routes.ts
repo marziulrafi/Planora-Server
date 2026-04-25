@@ -7,6 +7,13 @@ const router = Router() as any;
 router.get("/", EventController.getAllEvents);
 router.get("/featured", EventController.getFeaturedEvent);
 router.get("/upcoming", EventController.getUpcomingEvents);
+
+router.get(
+    "/my",
+    auth(UserRole.USER, UserRole.ADMIN),
+    EventController.getMyEvents
+);
+
 router.get("/:eventId", EventController.getEventById);
 
 router.post(
