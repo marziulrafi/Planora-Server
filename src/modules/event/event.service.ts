@@ -1,4 +1,5 @@
-import { EventType, Prisma } from "../../../generated/prisma";
+import type { EventType } from "../../../generated/prisma/enums";
+import type { Prisma } from "../../../generated/prisma/client";
 import { prisma } from "../../lib/prisma";
 
 const normalizeTimeTo24Hour = (time: string) => {
@@ -8,6 +9,8 @@ const normalizeTimeTo24Hour = (time: string) => {
     if (!match) return trimmedTime;
 
     const [, rawHour, minute, meridiem] = match;
+    if (!meridiem) return trimmedTime;
+    
     let hour = Number(rawHour);
     const upperMeridiem = meridiem.toUpperCase();
 
