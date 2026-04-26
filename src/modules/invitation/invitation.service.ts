@@ -1,32 +1,53 @@
 import { prisma } from "../../lib/prisma";
 
+class InvitationError extends Error {
+    statusCode: number;
+
+    constructor(message: string, statusCode: number) {
+        super(message);
+        this.statusCode = statusCode;
+    }
+}
+
 const sendInvitation = async (payload: {
     senderId: string;
-    receiverId: string;
+    email: string;
     eventId: string;
 }) => {
+    const normalizedEmail = payload.email.trim().toLowerCase();
     const event = await prisma.event.findUniqueOrThrow({ where: { id: payload.eventId } });
 
     if (event.ownerId !== payload.senderId) {
-        throw new Error("Only the event owner can send invitations");
-    }
-    if (payload.senderId === payload.receiverId) {
-        throw new Error("You cannot invite yourself");
+        throw new InvitationError("Only the event owner can send invitations", 403);
     }
 
-    await prisma.user.findUniqueOrThrow({ where: { id: payload.receiverId } });
+    const receiver = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+    });
+    if (!receiver) {
+        throw new InvitationError("User not found", 404);
+    }
+    if (payload.senderId === receiver.id) {
+        throw new InvitationError("You cannot invite yourself", 400);
+    }
 
     const existing = await prisma.invitation.findUnique({
         where: {
             receiverId_eventId: {
-                receiverId: payload.receiverId,
+                receiverId: receiver.id,
                 eventId: payload.eventId,
             },
         },
     });
-    if (existing) throw new Error("Invitation already sent to this user for this event");
+    if (existing) throw new InvitationError("Invitation already sent to this user for this event", 409);
 
-    return await prisma.invitation.create({ data: payload });
+    return await prisma.invitation.create({
+        data: {
+            senderId: payload.senderId,
+            receiverId: receiver.id,
+            eventId: payload.eventId,
+        },
+    });
 };
 
 const getMyInvitations = async (userId: string) => {
@@ -47,6 +68,14 @@ const getMyInvitations = async (userId: string) => {
 const acceptInvitation = async (invitationId: string, userId: string) => {
     const invitation = await prisma.invitation.findUniqueOrThrow({
         where: { id: invitationId },
+        include: {
+            event: {
+                select: {
+                    id: true,
+                    type: true,
+                },
+            },
+        },
     });
 
     if (invitation.receiverId !== userId) {
@@ -63,10 +92,14 @@ const acceptInvitation = async (invitationId: string, userId: string) => {
         }),
         prisma.participant.upsert({
             where: {
-                userId_eventId: { userId, eventId: invitation.eventId },
+                userId_eventId: { userId, eventId: invitation.event.id },
             },
-            create: { userId, eventId: invitation.eventId, status: "PENDING" },
-            update: { status: "PENDING" },
+            create: {
+                userId,
+                eventId: invitation.event.id,
+                status: invitation.event.type === "PUBLIC" ? "APPROVED" : "APPROVED",
+            },
+            update: { status: "APPROVED" },
         }),
     ]);
 

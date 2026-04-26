@@ -87,6 +87,25 @@ const approveParticipant = async (
         throw new Error("Only the event owner can approve participants");
     }
 
+    const participant = await prisma.participant.findUniqueOrThrow({
+        where: { userId_eventId: { userId: targetUserId, eventId } },
+    });
+    if (participant.status !== "PENDING") {
+        throw new Error("Only pending requests can be approved");
+    }
+
+    const acceptedInvitation = await prisma.invitation.findFirst({
+        where: {
+            eventId,
+            receiverId: targetUserId,
+            status: "ACCEPTED",
+        },
+        select: { id: true },
+    });
+    if (acceptedInvitation) {
+        throw new Error("Invitation-based participants are auto-approved");
+    }
+
     return await prisma.participant.update({
         where: { userId_eventId: { userId: targetUserId, eventId } },
         data: { status: "APPROVED" },
@@ -134,20 +153,27 @@ const getParticipantsByEvent = async (eventId: string, requesterId: string) => {
         throw new Error("Only the event owner can view participants");
     }
 
-    return await prisma.participant.findMany({
+    const participants = await prisma.participant.findMany({
         where: { eventId },
         include: {
             user: { select: { id: true, name: true, email: true, image: true } },
         },
         orderBy: { createdAt: "desc" },
     });
+
+    const acceptedInvites = await prisma.invitation.findMany({
+        where: { eventId, status: "ACCEPTED" },
+        select: { receiverId: true },
+    });
+    const invitedUserIds = new Set(acceptedInvites.map((item) => item.receiverId));
+
+    return participants.map((participant) => ({
+        ...participant,
+        joinedViaInvitation: invitedUserIds.has(participant.userId),
+    }));
 };
 
-/**
- * Returns Participant[] (with event included) for the current user.
- * Only includes events the user joined (not owned).
- * Ownership is managed separately via GET /events/my.
- */
+
 const getMyJoinedEvents = async (userId: string) => {
     return await prisma.participant.findMany({
         where: { userId },

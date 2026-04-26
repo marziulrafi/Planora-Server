@@ -22,10 +22,6 @@ declare global {
     }
 }
 
-/**
- * Auth middleware using Better Auth session cookies only.
- * No JWT / Bearer tokens needed.
- */
 const authMiddleware =
     (...roles: UserRole[]) =>
         async (req: Request, res: Response, next: NextFunction) => {
