@@ -9,6 +9,11 @@ router.get(
     auth(UserRole.USER, UserRole.ADMIN),
     ParticipantController.getMyJoinedEvents
 );
+router.get(
+    "/my",
+    auth(UserRole.USER, UserRole.ADMIN),
+    ParticipantController.getMyJoinedEvents
+);
 
 router.post(
     "/",

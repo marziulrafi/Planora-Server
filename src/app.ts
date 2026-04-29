@@ -17,11 +17,17 @@ const app: Application = express();
 app.set("trust proxy", 1);
 
 const normalizeOrigin = (origin?: string) => origin?.replace(/\/$/, "") || "";
+const envOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => normalizeOrigin(origin.trim()))
+  .filter(Boolean);
 const allowedOrigins = [
   normalizeOrigin(process.env.FRONTEND_URL || process.env.CLIENT_URL || process.env.APP_URL),
   "http://localhost:5173",
   "http://localhost:3000",
+  "http://localhost:4000",
   "http://127.0.0.1:3000",
+  ...envOrigins,
 ].filter(Boolean);
 
 app.use(

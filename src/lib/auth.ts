@@ -6,11 +6,17 @@ const normalizeOrigin = (url?: string) => url?.replace(/\/+$/, "") || "";
 const frontendUrl =
   normalizeOrigin(process.env.FRONTEND_URL || process.env.CLIENT_URL || process.env.APP_URL) ||
   "http://localhost:3000";
+const extraTrustedOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((origin) => normalizeOrigin(origin.trim()))
+  .filter(Boolean);
 
 const defaultFrontendUrls = [
   "http://localhost:5173",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  "https://your-frontend.vercel.app",
+  ...extraTrustedOrigins,
 ].map(normalizeOrigin);
 
 export const auth = betterAuth({

@@ -18,7 +18,9 @@ const getErrorStatus = (error: unknown, fallback = 400) => {
 
 const sendInvitation = async (req: Request, res: Response) => {
     try {
-        const user = req.user;
+        if (!req.user?.id) {
+            return sendError(res, "Unauthorized", 401);
+        }
         const { email, eventId } = req.body as { email?: string; eventId?: string };
 
         if (!email || !EMAIL_REGEX.test(email.trim())) {
@@ -29,7 +31,7 @@ const sendInvitation = async (req: Request, res: Response) => {
         }
 
         const result = await InvitationService.sendInvitation({
-            senderId: user?.id as string,
+            senderId: req.user.id,
             email,
             eventId,
         });
@@ -45,8 +47,10 @@ const sendInvitation = async (req: Request, res: Response) => {
 
 const getMyInvitations = async (req: Request, res: Response) => {
     try {
-        const user = req.user;
-        const result = await InvitationService.getMyInvitations(user?.id as string);
+        if (!req.user?.id) {
+            return sendError(res, "Unauthorized", 401);
+        }
+        const result = await InvitationService.getMyInvitations(req.user.id);
         sendSuccess(res, result);
     } catch (e) {
         sendError(res, "Failed to fetch invitations", 400);
@@ -55,9 +59,11 @@ const getMyInvitations = async (req: Request, res: Response) => {
 
 const acceptInvitation = async (req: Request, res: Response) => {
     try {
-        const user = req.user;
+        if (!req.user?.id) {
+            return sendError(res, "Unauthorized", 401);
+        }
         const invitationId = String(req.params.invitationId);
-        const result = await InvitationService.acceptInvitation(invitationId, user?.id as string);
+        const result = await InvitationService.acceptInvitation(invitationId, req.user.id);
         sendSuccess(res, result);
     } catch (e) {
         sendError(res, e instanceof Error ? e.message : "Failed to accept invitation", getErrorStatus(e, 400));
@@ -66,9 +72,11 @@ const acceptInvitation = async (req: Request, res: Response) => {
 
 const declineInvitation = async (req: Request, res: Response) => {
     try {
-        const user = req.user;
+        if (!req.user?.id) {
+            return sendError(res, "Unauthorized", 401);
+        }
         const invitationId = String(req.params.invitationId);
-        const result = await InvitationService.declineInvitation(invitationId, user?.id as string);
+        const result = await InvitationService.declineInvitation(invitationId, req.user.id);
         sendSuccess(res, result);
     } catch (e) {
         sendError(res, e instanceof Error ? e.message : "Failed to decline invitation", getErrorStatus(e, 400));

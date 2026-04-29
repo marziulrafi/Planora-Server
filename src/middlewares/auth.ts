@@ -37,7 +37,7 @@ const authMiddleware =
                 const user: AuthUser = {
                     id: session.user.id,
                     email: session.user.email,
-                    role: (session.user as any).role as UserRole,
+                    role: ((session.user as any).role as UserRole) || UserRole.USER,
                 };
 
                 if (roles.length && !roles.includes(user.role)) {
