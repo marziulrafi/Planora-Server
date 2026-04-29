@@ -16,29 +16,32 @@ const app: Application = express();
 
 app.set("trust proxy", 1);
 
+const normalizeOrigin = (origin?: string) => origin?.replace(/\/$/, "") || "";
 const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    process.env.CLIENT_URL,
-];
+  normalizeOrigin(process.env.FRONTEND_URL || process.env.CLIENT_URL || process.env.APP_URL),
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+].filter(Boolean);
 
-app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-        return callback(new Error("Not allowed by CORS"));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
+      callback(new Error(`Not allowed by CORS: ${origin}`));
     },
     credentials: true,
-}));
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api/auth/*splat", toNodeHandler(auth));
-
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", toNodeHandler(auth));
+app.use("/auth", toNodeHandler(auth));
+app.use("/api/v1/auth", toNodeHandler(auth));
+app.use("/api/account", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/participants", participantRoutes);
 app.use("/api/reviews", reviewRoutes);
