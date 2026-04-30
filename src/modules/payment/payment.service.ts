@@ -73,7 +73,6 @@ const handleSuccess = async ({ tranId, status, valId }: PaymentGatewaySuccessInp
         return payment;
     }
 
-    const paidAt = new Date();
     const [updatedPayment, participant] = await prisma.$transaction([
         prisma.payment.update({
             where: { tranId },
@@ -87,9 +86,8 @@ const handleSuccess = async ({ tranId, status, valId }: PaymentGatewaySuccessInp
                 userId: payment.userId,
                 eventId: payment.eventId,
                 status: "PENDING",
-                paidAt,
             },
-            update: { status: "PENDING", paidAt },
+            update: { status: "PENDING" },
         }),
     ]);
 

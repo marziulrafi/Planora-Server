@@ -100,6 +100,10 @@ const handleFail = async (req: Request, res: Response) => {
     const { tranId } = getCallbackPayload(req);
     try {
         if (tranId) await PaymentService.handleFail(tranId);
+        if (shouldRedirect(req)) {
+            return redirectWithQuery(res, "/payment/fail", tranId || undefined);
+        }
+        return sendSuccess(res, { tranId: tranId || null, status: "FAILED" });
     } catch (e) {
         const message = e instanceof Error ? e.message : "Payment fail processing failed";
         console.error("[payment/fail] failed to process callback", {
@@ -111,11 +115,7 @@ const handleFail = async (req: Request, res: Response) => {
         if (!shouldRedirect(req)) {
             return sendError(res, message, 400);
         }
-    } finally {
-        if (shouldRedirect(req)) {
-            return redirectWithQuery(res, "/payment/fail", tranId || undefined);
-        }
-        return sendSuccess(res, { tranId: tranId || null, status: "FAILED" });
+        return redirectWithQuery(res, "/payment/fail", tranId || undefined);
     }
 };
 
@@ -123,6 +123,10 @@ const handleCancel = async (req: Request, res: Response) => {
     const { tranId } = getCallbackPayload(req);
     try {
         if (tranId) await PaymentService.handleCancel(tranId);
+        if (shouldRedirect(req)) {
+            return redirectWithQuery(res, "/payment/cancel", tranId || undefined);
+        }
+        return sendSuccess(res, { tranId: tranId || null, status: "CANCELLED" });
     } catch (e) {
         const message = e instanceof Error ? e.message : "Payment cancel processing failed";
         console.error("[payment/cancel] failed to process callback", {
@@ -134,11 +138,7 @@ const handleCancel = async (req: Request, res: Response) => {
         if (!shouldRedirect(req)) {
             return sendError(res, message, 400);
         }
-    } finally {
-        if (shouldRedirect(req)) {
-            return redirectWithQuery(res, "/payment/cancel", tranId || undefined);
-        }
-        return sendSuccess(res, { tranId: tranId || null, status: "CANCELLED" });
+        return redirectWithQuery(res, "/payment/cancel", tranId || undefined);
     }
 };
 
