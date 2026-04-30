@@ -2,6 +2,12 @@ import { prisma } from "../../lib/prisma";
 
 const SSLCommerzPayment = require("sslcommerz-lts");
 
+type PaymentGatewaySuccessInput = {
+    tranId: string;
+    status?: string;
+    valId?: string;
+};
+
 const initiatePayment = async (userId: string, eventId: string) => {
     const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -54,7 +60,12 @@ const initiatePayment = async (userId: string, eventId: string) => {
     return { gatewayUrl: apiResponse.GatewayPageURL, paymentUrl: apiResponse.GatewayPageURL, tranId };
 };
 
-const handleSuccess = async (tranId: string) => {
+const handleSuccess = async ({ tranId, status, valId }: PaymentGatewaySuccessInput) => {
+    const normalizedStatus = typeof status === "string" ? status.trim().toUpperCase() : "VALID";
+    if (normalizedStatus && !["VALID", "VALIDATED", "SUCCESS"].includes(normalizedStatus)) {
+        throw new Error(`Gateway did not return a valid success status (${normalizedStatus})`);
+    }
+
     const payment = await prisma.payment.findUnique({ where: { tranId } });
     if (!payment) throw new Error("Payment not found");
 
@@ -82,7 +93,7 @@ const handleSuccess = async (tranId: string) => {
         }),
     ]);
 
-    return { payment: updatedPayment, participant };
+    return { payment: updatedPayment, participant, valId: valId || null };
 };
 
 const getPaymentByTranId = async (tranId: string) => {
