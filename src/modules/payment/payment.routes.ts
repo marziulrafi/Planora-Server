@@ -23,12 +23,9 @@ router.get(
 );
 
 
-router.post("/success", PaymentController.handleSuccess);
-router.post("/fail", PaymentController.handleFail);
-router.post("/cancel", PaymentController.handleCancel);
-router.get("/success", PaymentController.handleSuccess);
-router.get("/fail", PaymentController.handleFail);
-router.get("/cancel", PaymentController.handleCancel);
+router.all("/success", PaymentController.handleSuccess);
+router.all("/fail", PaymentController.handleFail);
+router.all("/cancel", PaymentController.handleCancel);
 
 router.get("/verify", PaymentController.verifyPayment);
 

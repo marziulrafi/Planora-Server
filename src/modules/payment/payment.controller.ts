@@ -5,7 +5,25 @@ import { sendError, sendSuccess } from "../../lib/http";
 const getClientUrl = () =>
     process.env.CLIENT_URL || process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000";
 
-const safeString = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const safeString = (value: unknown): string => {
+    if (typeof value === "string") return value.trim();
+    if (typeof value === "number" || typeof value === "boolean") return String(value).trim();
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const normalized = safeString(item);
+            if (normalized) return normalized;
+        }
+    }
+    return "";
+};
+
+const pickValue = (source: Record<string, unknown>, keys: string[]): string => {
+    for (const key of keys) {
+        const value = safeString(source[key]);
+        if (value) return value;
+    }
+    return "";
+};
 
 const getCallbackPayload = (req: Request) => {
     const bodySource =
@@ -19,9 +37,9 @@ const getCallbackPayload = (req: Request) => {
     const merged = { ...querySource, ...bodySource };
 
     return {
-        tranId: safeString(merged.tran_id),
-        status: safeString(merged.status),
-        valId: safeString(merged.val_id),
+        tranId: pickValue(merged, ["tran_id", "tranId", "transaction_id", "transactionId"]),
+        status: pickValue(merged, ["status", "payment_status"]),
+        valId: pickValue(merged, ["val_id", "valId"]),
     };
 };
 
@@ -40,7 +58,10 @@ const redirectWithQuery = (res: Response, path: string, tranId?: string) => {
 const initiatePayment = async (req: Request, res: Response) => {
     try {
         const user = req.user;
-        const { eventId } = req.body;
+        const eventId = safeString((req.body as Record<string, unknown>)?.eventId);
+        if (!eventId) {
+            return sendError(res, "Missing event id", 400);
+        }
         const result = await PaymentService.initiatePayment(user?.id as string, eventId);
         sendSuccess(res, result);
     } catch (e) {
@@ -84,8 +105,16 @@ const handleSuccess = async (req: Request, res: Response) => {
 
 const verifyPayment = async (req: Request, res: Response) => {
     try {
-        const tranId = req.query?.tran_id;
-        if (!tranId || typeof tranId !== "string") {
+        const bodySource =
+            req.body && typeof req.body === "object"
+                ? (req.body as Record<string, unknown>)
+                : ({} as Record<string, unknown>);
+        const querySource =
+            req.query && typeof req.query === "object"
+                ? (req.query as Record<string, unknown>)
+                : ({} as Record<string, unknown>);
+        const tranId = pickValue({ ...querySource, ...bodySource }, ["tran_id", "tranId"]);
+        if (!tranId) {
             return sendError(res, "Missing transaction id", 400);
         }
         const payment = await PaymentService.getPaymentByTranId(tranId);
