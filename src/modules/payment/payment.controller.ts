@@ -2,8 +2,11 @@ import { Request, Response } from "express";
 import { PaymentService } from "./payment.service";
 import { sendError, sendSuccess } from "../../lib/http";
 
+const normalizeUrl = (value?: string) =>
+    String(value || "").trim().replace(/\/+$/, "").replace(/\/api$/i, "");
+
 const getClientUrl = () =>
-    process.env.CLIENT_URL || process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000";
+    normalizeUrl(process.env.CLIENT_URL || process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000");
 
 const safeString = (value: unknown): string => {
     if (typeof value === "string") return value.trim();
@@ -25,11 +28,23 @@ const pickValue = (source: Record<string, unknown>, keys: string[]): string => {
     return "";
 };
 
+const parseRequestBody = (body: unknown): Record<string, unknown> => {
+    if (typeof body === "string") {
+        const parsed = new URLSearchParams(body);
+        return Object.fromEntries(parsed.entries());
+    }
+    if (Buffer.isBuffer(body)) {
+        const parsed = new URLSearchParams(body.toString("utf8"));
+        return Object.fromEntries(parsed.entries());
+    }
+    if (body && typeof body === "object") {
+        return body as Record<string, unknown>;
+    }
+    return {} as Record<string, unknown>;
+};
+
 const getCallbackPayload = (req: Request) => {
-    const bodySource =
-        req.body && typeof req.body === "object"
-            ? (req.body as Record<string, unknown>)
-            : ({} as Record<string, unknown>);
+    const bodySource = parseRequestBody(req.body);
     const querySource =
         req.query && typeof req.query === "object"
             ? (req.query as Record<string, unknown>)

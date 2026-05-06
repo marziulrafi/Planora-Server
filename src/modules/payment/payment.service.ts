@@ -8,6 +8,10 @@ type PaymentGatewaySuccessInput = {
     valId?: string;
 };
 
+const normalizeUrl = (value?: string) => {
+    return String(value || "").trim().replace(/\/+$/, "").replace(/\/api$/i, "");
+};
+
 const initiatePayment = async (userId: string, eventId: string) => {
     const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
@@ -21,12 +25,15 @@ const initiatePayment = async (userId: string, eventId: string) => {
         data: { tranId, amount: event.fee, userId, eventId, status: "INITIATED" },
     });
 
-    const storeId = process.env.SSLCOMMERZ_STORE_ID as string;
-    const storePass = process.env.SSLCOMMERZ_STORE_PASS as string;
+    const storeId = String(process.env.SSLCOMMERZ_STORE_ID || "").trim();
+    const storePass = String(process.env.SSLCOMMERZ_STORE_PASS || "").trim();
     const isLive = process.env.SSLCOMMERZ_IS_LIVE === "true";
-    const serverUrl = process.env.SERVER_URL as string;
+    const serverUrl = normalizeUrl(process.env.SERVER_URL || process.env.BACKEND_URL);
+    if (!storeId || !storePass) {
+        throw new Error("SSLCOMMERZ_STORE_ID and SSLCOMMERZ_STORE_PASS must be configured");
+    }
     if (!serverUrl) {
-        throw new Error("SERVER_URL is not configured");
+        throw new Error("SERVER_URL or BACKEND_URL is not configured");
     }
 
     const sslData = {
