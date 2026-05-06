@@ -30,7 +30,15 @@ const pickValue = (source: Record<string, unknown>, keys: string[]): string => {
 
 const parseRequestBody = (body: unknown): Record<string, unknown> => {
     if (typeof body === "string") {
-        const parsed = new URLSearchParams(body);
+        const trimmed = body.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                return JSON.parse(trimmed) as Record<string, unknown>;
+            } catch {
+                // fall back to URL search params
+            }
+        }
+        const parsed = new URLSearchParams(trimmed);
         return Object.fromEntries(parsed.entries());
     }
     if (Buffer.isBuffer(body)) {
@@ -91,8 +99,12 @@ const initiatePayment = async (req: Request, res: Response) => {
 };
 
 const handleSuccess = async (req: Request, res: Response) => {
-    const { tranId, status, valId } = getCallbackPayload(req);
+    let tranId = "";
+    let status = "";
+    let valId = "";
+
     try {
+        ({ tranId, status, valId } = getCallbackPayload(req));
         if (!tranId) {
             const message = "Missing transaction id in payment success callback";
             console.error("[payment/success] invalid callback payload", { body: req.body, query: req.query });
@@ -147,8 +159,9 @@ const verifyPayment = async (req: Request, res: Response) => {
 };
 
 const handleFail = async (req: Request, res: Response) => {
-    const { tranId } = getCallbackPayload(req);
+    let tranId = "";
     try {
+        ({ tranId } = getCallbackPayload(req));
         if (tranId) await PaymentService.handleFail(tranId);
         if (shouldRedirect(req)) {
             return redirectWithQuery(res, "/payment/fail", tranId || undefined);
@@ -170,8 +183,9 @@ const handleFail = async (req: Request, res: Response) => {
 };
 
 const handleCancel = async (req: Request, res: Response) => {
-    const { tranId } = getCallbackPayload(req);
+    let tranId = "";
     try {
+        ({ tranId } = getCallbackPayload(req));
         if (tranId) await PaymentService.handleCancel(tranId);
         if (shouldRedirect(req)) {
             return redirectWithQuery(res, "/payment/cancel", tranId || undefined);

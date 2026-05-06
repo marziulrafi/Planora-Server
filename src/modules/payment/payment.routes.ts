@@ -22,7 +22,7 @@ router.get(
     PaymentController.getMyPayments
 );
 
-const callbackBodyParser = express.urlencoded({ extended: true, type: "*/*" });
+const callbackBodyParser = express.text({ type: "*/*", limit: "1mb" });
 
 router.all("/success", callbackBodyParser, PaymentController.handleSuccess);
 router.all("/fail", callbackBodyParser, PaymentController.handleFail);
