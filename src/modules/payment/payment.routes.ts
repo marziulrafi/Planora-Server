@@ -1,4 +1,4 @@
-import { Router } from "express";
+import express, { Router } from "express";
 import { PaymentController } from "./payment.controller";
 import auth, { UserRole } from "../../middlewares/auth";
 
@@ -22,10 +22,11 @@ router.get(
     PaymentController.getMyPayments
 );
 
+const callbackBodyParser = express.urlencoded({ extended: true, type: "*/*" });
 
-router.all("/success", PaymentController.handleSuccess);
-router.all("/fail", PaymentController.handleFail);
-router.all("/cancel", PaymentController.handleCancel);
+router.all("/success", callbackBodyParser, PaymentController.handleSuccess);
+router.all("/fail", callbackBodyParser, PaymentController.handleFail);
+router.all("/cancel", callbackBodyParser, PaymentController.handleCancel);
 
 router.get("/verify", PaymentController.verifyPayment);
 

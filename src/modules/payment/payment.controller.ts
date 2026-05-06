@@ -37,6 +37,12 @@ const parseRequestBody = (body: unknown): Record<string, unknown> => {
         const parsed = new URLSearchParams(body.toString("utf8"));
         return Object.fromEntries(parsed.entries());
     }
+    if (body instanceof URLSearchParams) {
+        return Object.fromEntries(body.entries());
+    }
+    if (body instanceof Map) {
+        return Object.fromEntries(body.entries());
+    }
     if (body && typeof body === "object") {
         return body as Record<string, unknown>;
     }
