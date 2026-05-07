@@ -146,16 +146,17 @@ model Invitation {
 }
 
 model Payment {
-  id        String        @id @default(cuid())
-  tranId    String        @unique
-  amount    Float
-  currency  String        @default("BDT")
-  status    PaymentStatus @default(INITIATED)
-  createdAt DateTime      @default(now())
-  userId    String
-  eventId   String
-  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  tranId          String        @unique
+  amount          Float
+  currency        String        @default("BDT")
+  status          PaymentStatus @default(INITIATED)
+  stripeSessionId String?
+  createdAt       DateTime      @default(now())
+  userId          String
+  eventId         String
+  event           Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payment")
 }

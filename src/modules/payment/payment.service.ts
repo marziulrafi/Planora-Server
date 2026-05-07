@@ -1,16 +1,25 @@
 import { prisma } from "../../lib/prisma";
+import Stripe from "stripe";
 
-const SSLCommerzPayment = require("sslcommerz-lts");
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2026-04-22.dahlia",
+});
 
 type PaymentGatewaySuccessInput = {
     tranId: string;
-    status?: string;
-    valId?: string;
+    sessionId?: string;
 };
 
-const normalizeUrl = (value?: string) => {
-    return String(value || "").trim().replace(/\/+$/, "").replace(/\/api$/i, "");
-};
+const getClientUrl = () =>
+    String(
+        process.env.CLIENT_URL ||
+        process.env.APP_URL ||
+        process.env.FRONTEND_URL ||
+        "http://localhost:3000"
+    )
+        .trim()
+        .replace(/\/+$/, "")
+        .replace(/\/api$/i, "");
 
 const initiatePayment = async (userId: string, eventId: string) => {
     const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
@@ -25,59 +34,95 @@ const initiatePayment = async (userId: string, eventId: string) => {
         data: { tranId, amount: event.fee, userId, eventId, status: "INITIATED" },
     });
 
-    const storeId = String(process.env.SSLCOMMERZ_STORE_ID || "").trim();
-    const storePass = String(process.env.SSLCOMMERZ_STORE_PASS || "").trim();
-    const isLive = process.env.SSLCOMMERZ_IS_LIVE === "true";
-    const serverUrl = normalizeUrl(process.env.SERVER_URL || process.env.BACKEND_URL);
-    if (!storeId || !storePass) {
-        throw new Error("SSLCOMMERZ_STORE_ID and SSLCOMMERZ_STORE_PASS must be configured");
-    }
-    if (!serverUrl) {
-        throw new Error("SERVER_URL or BACKEND_URL is not configured");
-    }
+    const clientUrl = getClientUrl();
 
-    const sslData = {
-        store_id: storeId,
-        store_passwd: storePass,
-        total_amount: event.fee,
-        currency: "BDT",
-        tran_id: tranId,
-        success_url: `${serverUrl}/api/payment/success`,
-        fail_url: `${serverUrl}/api/payment/fail`,
-        cancel_url: `${serverUrl}/api/payment/cancel`,
-        cus_name: user.name,
-        cus_email: user.email,
-        cus_add1: "Bangladesh",
-        cus_city: "Dhaka",
-        cus_country: "Bangladesh",
-        cus_phone: "01700000000",
-        shipping_method: "NO",
-        product_name: event.title,
-        product_category: "Event",
-        product_profile: "general",
-    };
+    const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        customer_email: user.email,
+        metadata: {
+            tranId,   // ← this is how we identify the payment in the webhook
+            userId,
+            eventId,
+        },
+        line_items: [
+            {
+                price_data: {
+                    currency: "bdt",
+                    product_data: {
+                        name: event.title,
+                        description: "Event registration fee",
+                    },
+                    unit_amount: Math.round(event.fee * 100), // Stripe uses smallest unit (paisa)
+                },
+                quantity: 1,
+            },
+        ],
+        success_url: `${clientUrl}/payment/success?tran_id=${tranId}&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${clientUrl}/payment/cancel?tran_id=${tranId}`,
+    });
 
-    const sslcz = new SSLCommerzPayment(storeId, storePass, isLive);
-    const apiResponse = await sslcz.init(sslData);
-
-    if (!apiResponse?.GatewayPageURL) {
-        throw new Error("Failed to initialize payment gateway");
+    if (!session.url) {
+        throw new Error("Failed to initialize Stripe payment session");
     }
 
-    return { gatewayUrl: apiResponse.GatewayPageURL, paymentUrl: apiResponse.GatewayPageURL, tranId };
+    return { gatewayUrl: session.url, paymentUrl: session.url, tranId, sessionId: session.id };
 };
 
-const handleSuccess = async ({ tranId, status, valId }: PaymentGatewaySuccessInput) => {
-    const normalizedStatus = typeof status === "string" ? status.trim().toUpperCase() : "VALID";
-    if (normalizedStatus && !["VALID", "VALIDATED", "SUCCESS"].includes(normalizedStatus)) {
-        throw new Error(`Gateway did not return a valid success status (${normalizedStatus})`);
+// ─── Webhook ──────────────────────────────────────────────────────────────────
+// Called by Stripe with a raw Buffer body. Never call this from the frontend.
+
+const handleWebhook = async (rawBody: Buffer, signature: string) => {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
+
+    let stripeEvent: Stripe.Event;
+    try {
+        stripeEvent = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+    } catch (err) {
+        throw new Error(
+            `Webhook signature verification failed: ${err instanceof Error ? err.message : String(err)}`
+        );
     }
 
+    if (stripeEvent.type === "checkout.session.completed") {
+        const session = stripeEvent.data.object as Stripe.Checkout.Session;
+        if (session.payment_status === "paid") {
+            const tranId = session.metadata?.tranId;
+            if (tranId) {
+                await handleSuccess({ tranId, sessionId: session.id });
+            }
+        }
+    }
+
+    if (stripeEvent.type === "checkout.session.expired") {
+        const session = stripeEvent.data.object as Stripe.Checkout.Session;
+        const tranId = session.metadata?.tranId;
+        if (tranId) {
+            await handleFail(tranId);
+        }
+    }
+
+    return { received: true };
+};
+
+// ─── Handle Success ───────────────────────────────────────────────────────────
+// Can be called from webhook (primary) or from frontend verify call (secondary).
+
+const handleSuccess = async ({ tranId, sessionId }: PaymentGatewaySuccessInput) => {
     const payment = await prisma.payment.findUnique({ where: { tranId } });
     if (!payment) throw new Error("Payment not found");
 
+    // Idempotency guard — webhook may fire more than once
     if (payment.status === "SUCCESS") {
         return payment;
+    }
+
+    // If sessionId provided, verify with Stripe directly before marking success
+    if (sessionId) {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        if (session.payment_status !== "paid") {
+            throw new Error("Stripe session is not marked as paid");
+        }
     }
 
     const [updatedPayment, participant] = await prisma.$transaction([
@@ -98,7 +143,7 @@ const handleSuccess = async ({ tranId, status, valId }: PaymentGatewaySuccessInp
         }),
     ]);
 
-    return { payment: updatedPayment, participant, valId: valId || null };
+    return { payment: updatedPayment, participant };
 };
 
 const getPaymentByTranId = async (tranId: string) => {
@@ -137,9 +182,10 @@ const getMyPayments = async (userId: string) => {
 
 export const PaymentService = {
     initiatePayment,
+    handleWebhook,
     handleSuccess,
     handleFail,
     handleCancel,
     getMyPayments,
     getPaymentByTranId,
-}
+};

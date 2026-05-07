@@ -6,7 +6,12 @@ const normalizeUrl = (value?: string) =>
     String(value || "").trim().replace(/\/+$/, "").replace(/\/api$/i, "");
 
 const getClientUrl = () =>
-    normalizeUrl(process.env.CLIENT_URL || process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000");
+    normalizeUrl(
+        process.env.CLIENT_URL ||
+        process.env.APP_URL ||
+        process.env.FRONTEND_URL ||
+        "http://localhost:3000"
+    );
 
 const safeString = (value: unknown): string => {
     if (typeof value === "string") return value.trim();
@@ -28,61 +33,13 @@ const pickValue = (source: Record<string, unknown>, keys: string[]): string => {
     return "";
 };
 
-const parseRequestBody = (body: unknown): Record<string, unknown> => {
-    if (typeof body === "string") {
-        const trimmed = body.trim();
-        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-            try {
-                return JSON.parse(trimmed) as Record<string, unknown>;
-            } catch {
-                // fall back to URL search params
-            }
-        }
-        const parsed = new URLSearchParams(trimmed);
-        return Object.fromEntries(parsed.entries());
-    }
-    if (Buffer.isBuffer(body)) {
-        const parsed = new URLSearchParams(body.toString("utf8"));
-        return Object.fromEntries(parsed.entries());
-    }
-    if (body instanceof URLSearchParams) {
-        return Object.fromEntries(body.entries());
-    }
-    if (body instanceof Map) {
-        return Object.fromEntries(body.entries());
-    }
-    if (body && typeof body === "object") {
-        return body as Record<string, unknown>;
-    }
-    return {} as Record<string, unknown>;
-};
-
-const getCallbackPayload = (req: Request) => {
-    const bodySource = parseRequestBody(req.body);
-    const querySource =
-        req.query && typeof req.query === "object"
-            ? (req.query as Record<string, unknown>)
-            : ({} as Record<string, unknown>);
-    const merged = { ...querySource, ...bodySource };
-
-    return {
-        tranId: pickValue(merged, ["tran_id", "tranId", "transaction_id", "transactionId"]),
-        status: pickValue(merged, ["status", "payment_status"]),
-        valId: pickValue(merged, ["val_id", "valId"]),
-    };
-};
-
-const shouldRedirect = (req: Request) => {
-    const accept = safeString(req.headers.accept);
-    const userAgent = safeString(req.headers["user-agent"]);
-    return accept.includes("text/html") || userAgent.toLowerCase().includes("mozilla");
-};
-
-const redirectWithQuery = (res: Response, path: string, tranId?: string) => {
+const redirectWithQuery = (res: Response, path: string, params?: Record<string, string>) => {
     const clientUrl = getClientUrl().replace(/\/$/, "");
-    const query = tranId ? `?tran_id=${encodeURIComponent(tranId)}` : "";
+    const query = params ? "?" + new URLSearchParams(params).toString() : "";
     return res.redirect(`${clientUrl}${path}${query}`);
 };
+
+// ─── Initiate Payment ────────────────────────────────────────────────────────
 
 const initiatePayment = async (req: Request, res: Response) => {
     try {
@@ -98,58 +55,82 @@ const initiatePayment = async (req: Request, res: Response) => {
     }
 };
 
-const handleSuccess = async (req: Request, res: Response) => {
-    let tranId = "";
-    let status = "";
-    let valId = "";
+// ─── Stripe Webhook ───────────────────────────────────────────────────────────
+// Stripe sends POST requests to this endpoint with a raw body and a signature header.
+// The route MUST use express.raw() body parser (configured in routes).
+
+const handleWebhook = async (req: Request, res: Response) => {
+    const signature = safeString(req.headers["stripe-signature"]);
+
+    if (!signature) {
+        return sendError(res, "Missing Stripe signature", 400);
+    }
 
     try {
-        ({ tranId, status, valId } = getCallbackPayload(req));
-        if (!tranId) {
-            const message = "Missing transaction id in payment success callback";
-            console.error("[payment/success] invalid callback payload", { body: req.body, query: req.query });
-            if (shouldRedirect(req)) {
-                return redirectWithQuery(res, "/payment/fail");
-            }
-            return sendError(res, message, 400);
-        }
-
-        await PaymentService.handleSuccess({ tranId, status, valId });
-        if (shouldRedirect(req)) {
-            return redirectWithQuery(res, "/payment/success", tranId);
-        }
-        return sendSuccess(res, { tranId, status: "SUCCESS" });
+        // req.body must be the raw Buffer here (express.raw middleware in routes)
+        await PaymentService.handleWebhook(req.body as Buffer, signature);
+        return sendSuccess(res, { received: true });
     } catch (e) {
-        const message = e instanceof Error ? e.message : "Payment success processing failed";
-        console.error("[payment/success] failed to process callback", {
-            tranId,
-            status,
-            valId,
-            body: req.body,
-            query: req.query,
-            error: message,
-        });
-        if (shouldRedirect(req)) {
-            return redirectWithQuery(res, "/payment/fail", tranId || undefined);
-        }
+        const message = e instanceof Error ? e.message : "Webhook processing failed";
+        console.error("[payment/webhook] failed", { error: message });
         return sendError(res, message, 400);
     }
 };
 
+// ─── Payment Success (frontend redirect lands here via query params) ───────────
+// This is called by the frontend after Stripe redirects back.
+// It verifies the session with Stripe before marking as success.
+
+const handleSuccess = async (req: Request, res: Response) => {
+    const querySource = (req.query ?? {}) as Record<string, unknown>;
+    const tranId = pickValue(querySource, ["tran_id", "tranId"]);
+    const sessionId = pickValue(querySource, ["session_id", "sessionId"]);
+
+    if (!tranId) {
+        return sendError(res, "Missing transaction id", 400);
+    }
+
+    try {
+        await PaymentService.handleSuccess({ tranId, sessionId: sessionId || undefined });
+        return sendSuccess(res, { tranId, status: "SUCCESS" });
+    } catch (e) {
+        const message = e instanceof Error ? e.message : "Payment success processing failed";
+        console.error("[payment/success] failed", { tranId, sessionId, error: message });
+        return sendError(res, message, 400);
+    }
+};
+
+// ─── Payment Cancel ───────────────────────────────────────────────────────────
+
+const handleCancel = async (req: Request, res: Response) => {
+    const querySource = (req.query ?? {}) as Record<string, unknown>;
+    const tranId = pickValue(querySource, ["tran_id", "tranId"]);
+
+    try {
+        if (tranId) await PaymentService.handleCancel(tranId);
+        return sendSuccess(res, { tranId: tranId || null, status: "CANCELLED" });
+    } catch (e) {
+        const message = e instanceof Error ? e.message : "Payment cancel processing failed";
+        console.error("[payment/cancel] failed", { tranId, error: message });
+        return sendError(res, message, 400);
+    }
+};
+
+// ─── Verify Payment ───────────────────────────────────────────────────────────
+
 const verifyPayment = async (req: Request, res: Response) => {
     try {
+        const querySource = (req.query ?? {}) as Record<string, unknown>;
         const bodySource =
             req.body && typeof req.body === "object"
                 ? (req.body as Record<string, unknown>)
                 : ({} as Record<string, unknown>);
-        const querySource =
-            req.query && typeof req.query === "object"
-                ? (req.query as Record<string, unknown>)
-                : ({} as Record<string, unknown>);
+
         const tranId = pickValue({ ...querySource, ...bodySource }, ["tran_id", "tranId"]);
         if (!tranId) {
             return sendError(res, "Missing transaction id", 400);
         }
+
         const payment = await PaymentService.getPaymentByTranId(tranId);
         if (!payment) return sendError(res, "Payment not found", 404);
         sendSuccess(res, payment);
@@ -158,53 +139,7 @@ const verifyPayment = async (req: Request, res: Response) => {
     }
 };
 
-const handleFail = async (req: Request, res: Response) => {
-    let tranId = "";
-    try {
-        ({ tranId } = getCallbackPayload(req));
-        if (tranId) await PaymentService.handleFail(tranId);
-        if (shouldRedirect(req)) {
-            return redirectWithQuery(res, "/payment/fail", tranId || undefined);
-        }
-        return sendSuccess(res, { tranId: tranId || null, status: "FAILED" });
-    } catch (e) {
-        const message = e instanceof Error ? e.message : "Payment fail processing failed";
-        console.error("[payment/fail] failed to process callback", {
-            tranId,
-            body: req.body,
-            query: req.query,
-            error: message,
-        });
-        if (!shouldRedirect(req)) {
-            return sendError(res, message, 400);
-        }
-        return redirectWithQuery(res, "/payment/fail", tranId || undefined);
-    }
-};
-
-const handleCancel = async (req: Request, res: Response) => {
-    let tranId = "";
-    try {
-        ({ tranId } = getCallbackPayload(req));
-        if (tranId) await PaymentService.handleCancel(tranId);
-        if (shouldRedirect(req)) {
-            return redirectWithQuery(res, "/payment/cancel", tranId || undefined);
-        }
-        return sendSuccess(res, { tranId: tranId || null, status: "CANCELLED" });
-    } catch (e) {
-        const message = e instanceof Error ? e.message : "Payment cancel processing failed";
-        console.error("[payment/cancel] failed to process callback", {
-            tranId,
-            body: req.body,
-            query: req.query,
-            error: message,
-        });
-        if (!shouldRedirect(req)) {
-            return sendError(res, message, 400);
-        }
-        return redirectWithQuery(res, "/payment/cancel", tranId || undefined);
-    }
-};
+// ─── My Payments ─────────────────────────────────────────────────────────────
 
 const getMyPayments = async (req: Request, res: Response) => {
     try {
@@ -218,8 +153,8 @@ const getMyPayments = async (req: Request, res: Response) => {
 
 export const PaymentController = {
     initiatePayment,
+    handleWebhook,
     handleSuccess,
-    handleFail,
     handleCancel,
     getMyPayments,
     verifyPayment,
