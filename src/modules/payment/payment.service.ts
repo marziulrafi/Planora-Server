@@ -41,7 +41,7 @@ const initiatePayment = async (userId: string, eventId: string) => {
         mode: "payment",
         customer_email: user.email,
         metadata: {
-            tranId,   // ← this is how we identify the payment in the webhook
+            tranId,
             userId,
             eventId,
         },
@@ -53,7 +53,7 @@ const initiatePayment = async (userId: string, eventId: string) => {
                         name: event.title,
                         description: "Event registration fee",
                     },
-                    unit_amount: Math.round(event.fee * 100), // Stripe uses smallest unit (paisa)
+                    unit_amount: Math.round(event.fee * 100),
                 },
                 quantity: 1,
             },
@@ -69,23 +69,37 @@ const initiatePayment = async (userId: string, eventId: string) => {
     return { gatewayUrl: session.url, paymentUrl: session.url, tranId, sessionId: session.id };
 };
 
-// ─── Webhook ──────────────────────────────────────────────────────────────────
-// Called by Stripe with a raw Buffer body. Never call this from the frontend.
+
+type RawStripeEvent = {
+    type: string;
+    data: {
+        object: {
+            id: string;
+            payment_status?: string;
+            metadata?: Record<string, string>;
+        };
+    };
+};
 
 const handleWebhook = async (rawBody: Buffer, signature: string) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET as string;
 
-    let stripeEvent: Stripe.Event;
+    let stripeEvent: RawStripeEvent;
     try {
-        stripeEvent = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+        stripeEvent = stripe.webhooks.constructEvent(
+            rawBody,
+            signature,
+            webhookSecret
+        ) as unknown as RawStripeEvent;
     } catch (err) {
         throw new Error(
             `Webhook signature verification failed: ${err instanceof Error ? err.message : String(err)}`
         );
     }
 
+    const session = stripeEvent.data.object;
+
     if (stripeEvent.type === "checkout.session.completed") {
-        const session = stripeEvent.data.object as Stripe.Checkout.Session;
         if (session.payment_status === "paid") {
             const tranId = session.metadata?.tranId;
             if (tranId) {
@@ -95,7 +109,6 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
     }
 
     if (stripeEvent.type === "checkout.session.expired") {
-        const session = stripeEvent.data.object as Stripe.Checkout.Session;
         const tranId = session.metadata?.tranId;
         if (tranId) {
             await handleFail(tranId);
@@ -105,19 +118,14 @@ const handleWebhook = async (rawBody: Buffer, signature: string) => {
     return { received: true };
 };
 
-// ─── Handle Success ───────────────────────────────────────────────────────────
-// Can be called from webhook (primary) or from frontend verify call (secondary).
-
 const handleSuccess = async ({ tranId, sessionId }: PaymentGatewaySuccessInput) => {
     const payment = await prisma.payment.findUnique({ where: { tranId } });
     if (!payment) throw new Error("Payment not found");
 
-    // Idempotency guard — webhook may fire more than once
     if (payment.status === "SUCCESS") {
         return payment;
     }
 
-    // If sessionId provided, verify with Stripe directly before marking success
     if (sessionId) {
         const session = await stripe.checkout.sessions.retrieve(sessionId);
         if (session.payment_status !== "paid") {

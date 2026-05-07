@@ -33,13 +33,6 @@ const pickValue = (source: Record<string, unknown>, keys: string[]): string => {
     return "";
 };
 
-const redirectWithQuery = (res: Response, path: string, params?: Record<string, string>) => {
-    const clientUrl = getClientUrl().replace(/\/$/, "");
-    const query = params ? "?" + new URLSearchParams(params).toString() : "";
-    return res.redirect(`${clientUrl}${path}${query}`);
-};
-
-// ─── Initiate Payment ────────────────────────────────────────────────────────
 
 const initiatePayment = async (req: Request, res: Response) => {
     try {
@@ -55,10 +48,6 @@ const initiatePayment = async (req: Request, res: Response) => {
     }
 };
 
-// ─── Stripe Webhook ───────────────────────────────────────────────────────────
-// Stripe sends POST requests to this endpoint with a raw body and a signature header.
-// The route MUST use express.raw() body parser (configured in routes).
-
 const handleWebhook = async (req: Request, res: Response) => {
     const signature = safeString(req.headers["stripe-signature"]);
 
@@ -67,7 +56,6 @@ const handleWebhook = async (req: Request, res: Response) => {
     }
 
     try {
-        // req.body must be the raw Buffer here (express.raw middleware in routes)
         await PaymentService.handleWebhook(req.body as Buffer, signature);
         return sendSuccess(res, { received: true });
     } catch (e) {
@@ -77,21 +65,21 @@ const handleWebhook = async (req: Request, res: Response) => {
     }
 };
 
-// ─── Payment Success (frontend redirect lands here via query params) ───────────
-// This is called by the frontend after Stripe redirects back.
-// It verifies the session with Stripe before marking as success.
-
 const handleSuccess = async (req: Request, res: Response) => {
     const querySource = (req.query ?? {}) as Record<string, unknown>;
     const tranId = pickValue(querySource, ["tran_id", "tranId"]);
-    const sessionId = pickValue(querySource, ["session_id", "sessionId"]);
+    const sessionIdRaw = pickValue(querySource, ["session_id", "sessionId"]);
+
+    const sessionId: string | undefined = sessionIdRaw || undefined;
 
     if (!tranId) {
         return sendError(res, "Missing transaction id", 400);
     }
 
     try {
-        await PaymentService.handleSuccess({ tranId, sessionId: sessionId || undefined });
+        await PaymentService.handleSuccess(
+            sessionId ? { tranId, sessionId } : { tranId }
+        );
         return sendSuccess(res, { tranId, status: "SUCCESS" });
     } catch (e) {
         const message = e instanceof Error ? e.message : "Payment success processing failed";
@@ -99,8 +87,6 @@ const handleSuccess = async (req: Request, res: Response) => {
         return sendError(res, message, 400);
     }
 };
-
-// ─── Payment Cancel ───────────────────────────────────────────────────────────
 
 const handleCancel = async (req: Request, res: Response) => {
     const querySource = (req.query ?? {}) as Record<string, unknown>;
@@ -116,7 +102,6 @@ const handleCancel = async (req: Request, res: Response) => {
     }
 };
 
-// ─── Verify Payment ───────────────────────────────────────────────────────────
 
 const verifyPayment = async (req: Request, res: Response) => {
     try {
@@ -138,8 +123,6 @@ const verifyPayment = async (req: Request, res: Response) => {
         sendError(res, e instanceof Error ? e.message : "Verification failed", 400);
     }
 };
-
-// ─── My Payments ─────────────────────────────────────────────────────────────
 
 const getMyPayments = async (req: Request, res: Response) => {
     try {
